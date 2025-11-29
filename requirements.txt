@@ -1,0 +1,23 @@
+# USSD Educational Bot - Demo
+# Python 3.11+
+
+# Web Framework
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+
+# State Management
+redis==5.2.1
+
+# HTTP Client (for SMS API)
+httpx==0.28.1
+
+# Configuration
+python-dotenv==1.0.1
+pydantic==2.10.5
+pydantic-settings==2.7.1
+
+# LLM (Phase 2+)
+groq==0.14.0
+
+# Utilities
+python-dateutil==2.9.0.post0
