@@ -265,6 +265,98 @@ class LLMService:
                 "error": str(e)
             }
 
+    async def generate_chat_response(
+        self,
+        topic: str,
+        question: str,
+        context: list,
+        conversation_type: str = "free"
+    ) -> Optional[str]:
+        """
+        Generate chat response using LLM.
+
+        Args:
+            topic: Math topic (addition, subtraction, etc.)
+            question: User's question
+            context: Context window (last 3 turns)
+            conversation_type: explain, example, solve, or free
+
+        Returns:
+            Response string if successful, None if generation fails
+
+        Time Budget:
+            - Groq API call: ~2-4 seconds typical
+            - Total: <6 seconds (tighter than quiz for USSD)
+        """
+
+        if not settings.groq_api_key:
+            print("[LLM Chat] No API key configured, using fallback")
+            return None
+
+        # Build messages with system prompt + context + question
+        from app.data.content import CHAT_SYSTEM_PROMPT, CHAT_TYPE_INSTRUCTIONS
+
+        # Format context section
+        context_section = ""
+        if context:
+            context_lines = ["Previous conversation:"]
+            for msg in context:
+                role_label = "Student" if msg["role"] == "user" else "You"
+                context_lines.append(f"{role_label}: {msg['content']}")
+            context_section = "\n".join(context_lines)
+
+        # Get type-specific instruction
+        type_instruction = CHAT_TYPE_INSTRUCTIONS.get(
+            conversation_type,
+            CHAT_TYPE_INSTRUCTIONS["free"]
+        )
+
+        # Build system prompt
+        system_prompt = CHAT_SYSTEM_PROMPT.format(
+            topic=topic.title(),
+            context_section=context_section,
+            type_instruction=type_instruction
+        )
+
+        # User message
+        user_prompt = f"Student's question: {question}\n\nYour response (under 90 characters):"
+
+        try:
+            # Tighter timeout for chat (6 seconds vs 10 for quiz)
+            async with asyncio.timeout(settings.chat_timeout):
+                response = await self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": system_prompt
+                        },
+                        {
+                            "role": "user",
+                            "content": user_prompt
+                        }
+                    ],
+                    max_tokens=settings.chat_llm_max_tokens,  # 60 tokens for speed
+                    temperature=settings.chat_llm_temperature,  # 0.5 for consistency
+                )
+
+            # Extract response
+            raw_response = response.choices[0].message.content.strip()
+
+            if raw_response:
+                print(f"[LLM Chat] Generated response ({len(raw_response)} chars) for {topic}")
+                return raw_response
+            else:
+                print("[LLM Chat] Empty response from LLM")
+                return None
+
+        except asyncio.TimeoutError:
+            print(f"[LLM Chat] Timeout after {settings.chat_timeout}s")
+            return None
+        except Exception as e:
+            print(f"[LLM Chat] Error: {type(e).__name__}: {str(e)}")
+            return None
+
 
 # =============================================================================
 # SINGLETON INSTANCE

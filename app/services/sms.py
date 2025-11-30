@@ -215,13 +215,46 @@ class SMSService:
 
         message = "\n".join(lines)
         return await self.send_sms(phone_number, message)
-    
+
+    async def send_chat_timeout_response(
+        self,
+        phone_number: str,
+        question: str,
+        answer: str
+    ) -> dict:
+        """
+        Send SMS when LLM timed out during USSD session.
+
+        Called from background task after LLM eventually responds.
+        Optimized: No emojis (GSM-7 encoding).
+
+        Args:
+            phone_number: Recipient phone number
+            question: User's original question
+            answer: LLM's full answer (may be long)
+        """
+        # Truncate question if too long
+        q_display = question[:50] + "..." if len(question) > 50 else question
+
+        lines = [
+            "EduBot - Answer to your question",
+            "",
+            f"Q: {q_display}",
+            "",
+            f"A: {answer}",
+            "",
+            "Dial back to continue chatting!"
+        ]
+
+        message = "\n".join(lines)
+        return await self.send_sms(phone_number, message)
+
     async def send_session_summary(
         self,
         phone_number: str,
         lesson_topic: Optional[str] = None,
         quiz_results: Optional[dict] = None,
-        chat_history: Optional[List[dict]] = None
+        chat_history: Optional[dict] = None
     ) -> dict:
         """
         Send complete session summary when user exits - OPTIMIZED for cost savings.
@@ -232,6 +265,9 @@ class SMSService:
         - Minimal content to reduce SMS count
 
         Combines all activities into one SMS (or multiple if needed).
+
+        Args:
+            chat_history: Chat summary dict with 'full_history', 'topic', etc.
         """
         lines = ["EDUBOT SESSION SUMMARY", ""]
 
@@ -241,10 +277,26 @@ class SMSService:
         if quiz_results:
             lines.append(f"Quiz: {quiz_results['score']}/{quiz_results['total']} ({quiz_results['percentage']}%)")
 
-        if chat_history:
-            lines.append(f"Chat: {len(chat_history)} questions asked")
+        if chat_history and isinstance(chat_history, dict):
+            # Extract full conversation history
+            full_history = chat_history.get("full_history", [])
+            topic = chat_history.get("topic", "").title()
 
-        lines.append("")
+            if full_history:
+                lines.append(f"CHAT - {topic}")
+                lines.append("")
+
+                # Format each Q&A turn (compact, no emojis)
+                for i, turn in enumerate(full_history, 1):
+                    question = turn.get("question", "")
+                    # Use full answer if available, otherwise short answer
+                    answer = turn.get("answer_full") or turn.get("answer_short", "")
+
+                    # Compact format: Q1: question / A: answer
+                    lines.append(f"Q{i}: {question}")
+                    lines.append(f"A: {answer}")
+                    lines.append("")  # Blank line between turns
+
         lines.append("Thanks for learning!")
         lines.append("Dial back anytime.")
 

@@ -20,13 +20,22 @@ class Settings(BaseSettings):
     llm_timeout: int = 10  # seconds
     llm_max_tokens: int = 500
 
+    # Chat Configuration (Phase 3)
+    chat_timeout: int = 6                    # Tighter timeout for USSD chat (seconds)
+    chat_context_turns: int = 3              # Number of previous turns to include in context
+    chat_max_response_chars: int = 90        # Target response length for USSD display
+    chat_hard_truncate_chars: int = 95       # Absolute maximum before truncation
+    chat_llm_max_tokens: int = 60            # Limit output tokens for faster response
+    chat_llm_temperature: float = 0.5        # Lower temperature for more consistent responses
+
     # App Settings
     debug: bool = True
     session_timeout: int = 300  # 5 minutes
     max_ussd_chars: int = 160
 
     # Feature Flags
-    use_llm_quiz: bool = True  # Set to False to use pre-stored questions
+    use_llm_quiz: bool = True   # Set to False to use pre-stored questions
+    use_llm_chat: bool = True   # Set to False to use static fallback responses
 
     # SMS Settings
     sms_sender_id: str = "EduBot"

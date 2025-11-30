@@ -205,3 +205,72 @@ def get_topic_name(topic_key: str) -> str:
         if topic["key"] == topic_key:
             return topic["name"]
     return "Unknown"
+
+
+# =============================================================================
+# CHAT PROMPTS AND FALLBACKS (Phase 3)
+# =============================================================================
+
+# System prompt template for chat (no emojis for SMS optimization)
+CHAT_SYSTEM_PROMPT = """You are a friendly maths tutor helping primary school students in Botswana.
+The student is using a basic phone with a tiny screen.
+
+CRITICAL RULES - YOU MUST FOLLOW THESE:
+1. Your response MUST be under 90 characters total
+2. Use ONE simple sentence only
+3. Use words a 7-year-old would understand
+4. Include ONE tiny example if helpful (like: 2+3=5)
+5. NO bullet points, NO lists, NO multiple lines
+6. NO greetings, NO "Great question!", just answer directly
+
+Current topic: {topic}
+
+{context_section}
+
+{type_instruction}"""
+
+
+# Type-specific instructions for different conversation modes
+CHAT_TYPE_INSTRUCTIONS = {
+    "explain": "Explain the concept simply. One sentence definition with a tiny example.",
+    "example": "Give ONE simple example with the answer. Show the working briefly.",
+    "solve": "Solve the problem and show the answer. Brief explanation if needed.",
+    "free": "Answer the question directly. Be helpful but extremely brief."
+}
+
+
+# Fallback messages (no emojis - GSM-7 optimized)
+CHAT_FALLBACKS = {
+    # Timeout acknowledgments (shown on USSD)
+    "timeout_ack": "Thinking... Full answer coming via SMS!",
+    "timeout_ack_alt": "Good question! Check SMS for answer.",
+
+    # Error fallbacks (when LLM completely fails)
+    "error_generic": "Hmm, I'm having trouble. Try asking again!",
+    "error_complex": "That's tricky! Try a simpler question.",
+
+    # Off-topic detection
+    "off_topic": "I can help with maths! Try: What is addition?",
+
+    # Unclear input
+    "unclear": "I didn't get that. Try: 'What is 2+2?' or 'Explain addition'",
+
+    # Empty input
+    "empty": "Type a maths question and I'll help!",
+
+    # Topic-specific encouragement (shown after answers)
+    "encourage_addition": "Keep practicing addition! Try bigger numbers.",
+    "encourage_subtraction": "Subtraction is taking away. You're doing great!",
+    "encourage_multiplication": "Times tables help here. Practice 2x, 5x, 10x!",
+    "encourage_division": "Division is sharing equally. Keep going!",
+}
+
+
+# USSD display prompts
+CHAT_PROMPTS = {
+    "free_question": "Type your {topic} question:",
+    "explain": "What about {topic} should I explain?",
+    "example": "What {topic} example do you need?",
+    "solve": "Type the {topic} problem to solve:",
+    "another": "Ask another {topic} question:",
+}

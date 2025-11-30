@@ -15,7 +15,7 @@ settings = get_settings()
 class SessionManager:
     """
     Manages USSD session state in Redis.
-    
+
     Session structure:
     {
         "session_id": str,
@@ -26,9 +26,19 @@ class SessionManager:
             "questions": [...],
             "current_index": int,
             "answers": [...],
-            "score": int
+            "score": int,
+            "source": str           # llm or static
         },
-        "chat_history": [...],      # Q&A pairs for SMS
+        "chat_state": {             # Only during chat (Phase 3)
+            "topic": str,
+            "conversation_type": str | None,  # explain, example, solve, free
+            "context_window": [...],          # Last 3 turns for LLM
+            "full_history": [...],            # All turns for SMS
+            "turn_count": int,
+            "timeout_count": int,
+            "started_at": str
+        },
+        "chat_history": [...],      # Deprecated - use chat_state.full_history
         "created_at": str,
         "last_activity": str
     }
@@ -62,6 +72,7 @@ class SessionManager:
             "current_menu": "main",
             "topic": None,
             "quiz_state": None,
+            "chat_state": None,
             "chat_history": [],
             "created_at": datetime.utcnow().isoformat(),
             "last_activity": datetime.utcnow().isoformat()
@@ -221,29 +232,199 @@ class SessionManager:
         return None
     
     # =========================================================================
-    # Chat history methods
+    # Chat-specific methods (Phase 3)
     # =========================================================================
-    
-    def add_chat_turn(
-        self, 
-        session_id: str, 
-        question: str, 
-        answer: str
-    ) -> None:
-        """Add a Q&A pair to chat history."""
+
+    def start_chat(
+        self,
+        session_id: str,
+        topic: str
+    ) -> Dict[str, Any]:
+        """
+        Initialize chat state for a new conversation.
+
+        Args:
+            session_id: USSD session ID
+            topic: Chat topic (addition, subtraction, etc.)
+
+        Returns:
+            Updated session
+        """
         session = self.get_session(session_id)
         if session:
-            session["chat_history"].append({
-                "question": question,
-                "answer": answer,
-                "timestamp": datetime.utcnow().isoformat()
-            })
+            session["current_menu"] = "chat"
+            session["topic"] = topic
+            session["chat_state"] = {
+                "active": True,                 # Mark chat as active
+                "topic": topic,
+                "conversation_type": None,
+                "context_window": [],           # Last 3 turns for LLM
+                "full_history": [],             # All turns for SMS
+                "turn_count": 0,
+                "timeout_count": 0,
+                "started_at": datetime.utcnow().isoformat()
+            }
             self.save_session(session_id, session)
-    
+        return session
+
+    def set_chat_topic(
+        self,
+        session_id: str,
+        topic: str,
+        clear_context: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Change chat topic mid-conversation.
+
+        Args:
+            session_id: USSD session ID
+            topic: New topic
+            clear_context: If True, clear context window (fresh start)
+
+        Returns:
+            Updated session
+        """
+        session = self.get_session(session_id)
+        if session and session.get("chat_state"):
+            session["chat_state"]["topic"] = topic
+            session["topic"] = topic
+            if clear_context:
+                session["chat_state"]["context_window"] = []
+            self.save_session(session_id, session)
+        return session
+
+    def set_conversation_type(
+        self,
+        session_id: str,
+        conv_type: str
+    ) -> Dict[str, Any]:
+        """
+        Set conversation type (explain, example, solve, free).
+
+        Args:
+            session_id: USSD session ID
+            conv_type: Conversation type
+
+        Returns:
+            Updated session
+        """
+        session = self.get_session(session_id)
+        if session and session.get("chat_state"):
+            session["chat_state"]["conversation_type"] = conv_type
+            self.save_session(session_id, session)
+        return session
+
+    def get_chat_context(self, session_id: str) -> List[dict]:
+        """
+        Get context window (last 3 turns) for LLM prompt.
+
+        Returns:
+            List of {"role": "user"/"assistant", "content": "..."}
+        """
+        session = self.get_session(session_id)
+        if session and session.get("chat_state"):
+            return session["chat_state"].get("context_window", [])
+        return []
+
+    def add_chat_turn(
+        self,
+        session_id: str,
+        question: str,
+        answer_short: str,
+        answer_full: str = None,
+        was_truncated: bool = False,
+        was_timeout: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Add a Q&A turn to chat state with sliding window.
+
+        Maintains:
+        - context_window: Last 3 turns for LLM (sliding)
+        - full_history: All turns for SMS
+
+        Args:
+            session_id: USSD session ID
+            question: User's question
+            answer_short: Truncated answer for USSD (≤90 chars)
+            answer_full: Full answer for SMS
+            was_truncated: Whether answer was truncated
+            was_timeout: Whether LLM timed out
+
+        Returns:
+            Updated session
+        """
+        session = self.get_session(session_id)
+        if not session or not session.get("chat_state"):
+            return session
+
+        chat_state = session["chat_state"]
+        answer_full = answer_full or answer_short
+
+        # Add to context window for LLM (sliding window of 3 turns)
+        chat_state["context_window"].append({"role": "user", "content": question})
+        chat_state["context_window"].append({"role": "assistant", "content": answer_short})
+
+        # Keep only last 3 turns (6 messages: 3 Q&A pairs)
+        max_messages = settings.chat_context_turns * 2  # 3 turns = 6 messages
+        if len(chat_state["context_window"]) > max_messages:
+            # Remove oldest turn (first 2 messages)
+            chat_state["context_window"] = chat_state["context_window"][2:]
+
+        # Add to full history for SMS
+        chat_state["full_history"].append({
+            "question": question,
+            "answer_short": answer_short,
+            "answer_full": answer_full,
+            "was_truncated": was_truncated,
+            "was_timeout": was_timeout,
+            "timestamp": datetime.utcnow().isoformat()
+        })
+
+        # Update counters
+        chat_state["turn_count"] += 1
+        if was_timeout:
+            chat_state["timeout_count"] += 1
+
+        self.save_session(session_id, session)
+        return session
+
+    def get_chat_summary(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get chat statistics for analytics or end summary.
+
+        Returns:
+            {topic, turn_count, timeout_count, conversation_type, started_at}
+        """
+        session = self.get_session(session_id)
+        if session and session.get("chat_state"):
+            cs = session["chat_state"]
+            return {
+                "topic": cs.get("topic"),
+                "conversation_type": cs.get("conversation_type"),
+                "turn_count": cs.get("turn_count", 0),
+                "timeout_count": cs.get("timeout_count", 0),
+                "started_at": cs.get("started_at"),
+                "full_history": cs.get("full_history", [])
+            }
+        return None
+
+    # =========================================================================
+    # Legacy chat history methods (kept for backwards compatibility)
+    # =========================================================================
+
     def get_chat_history(self, session_id: str) -> List[dict]:
-        """Get chat history for SMS delivery."""
+        """
+        Get chat history for SMS delivery.
+
+        Note: For Phase 3 chat, use chat_state.full_history instead.
+        This method is kept for backwards compatibility.
+        """
         session = self.get_session(session_id)
         if session:
+            # Try new chat_state first
+            if session.get("chat_state"):
+                return session["chat_state"].get("full_history", [])
+            # Fall back to legacy chat_history
             return session.get("chat_history", [])
         return []
     
