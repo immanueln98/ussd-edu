@@ -22,6 +22,14 @@
 - **🛡️ Graceful Fallback**: Automatic switch to pre-stored questions if LLM fails
 - **📊 Dual Source Tracking**: Monitors whether questions are LLM-generated or static
 
+### ✅ Phase 3: Live Chat with AI Tutor (Complete)
+- **💬 Chat with AI Tutor**: Free-form Q&A about math topics via USSD
+- **🎯 4 Conversation Types**: Explain concepts, Show examples, Solve problems, Free chat
+- **🧠 Context-Aware**: 3-turn sliding window for natural conversations
+- **⏱️ Smart Timeout Handling**: 6-second USSD timeout with SMS fallback
+- **📏 Intelligent Truncation**: 90-char responses optimized for USSD screens
+- **📨 Conversation History**: Full Q&A chat log sent via SMS on exit
+
 ### 💰 SMS Cost Optimization
 - **📉 60-70% Cost Reduction**: Optimized formatting reduces SMS count dramatically
 - **🔤 GSM-7 Encoding**: No emojis = 160 chars/SMS instead of 70 chars/SMS (Unicode)
@@ -62,7 +70,16 @@
     │       ├─ Answer Q1, Q2, Q3...
     │       └─ Complete ──────────────────► SMS: Results (1-2 SMS)
     │
-    └─── [3] Exit ────────────────────────► SMS: Session Summary (1 SMS)
+    ├─── [3] Chat with AI Tutor
+    │       ├─ Select topic (1-4)
+    │       ├─ Choose mode (Explain/Example/Solve/Free)
+    │       ├─ Ask questions via USSD (context-aware)
+    │       │   ├─ [1] Ask another question
+    │       │   ├─ [2] Change topic
+    │       │   └─ [0] Exit chat
+    │       └─ Exit ───────────────────────► SMS: Full conversation (2-3 SMS)
+    │
+    └─── [4] Exit ────────────────────────► SMS: Session Summary (1 SMS)
 ```
 
 ## 🚀 Quick Start
@@ -125,6 +142,7 @@ REDIS_PORT=6379
 # App Settings
 DEBUG=true
 USE_LLM_QUIZ=true
+USE_LLM_CHAT=true
 
 # USSD Service Code
 USSD_SERVICE_CODE=*384*20251129#
@@ -236,6 +254,51 @@ curl -X POST http://localhost:8000/ussd/callback \
   -d "text=2*1*5*7"
 ```
 
+### Chat Mode Flow
+```bash
+# Start chat (option 3)
+curl -X POST http://localhost:8000/ussd/callback \
+  -d "sessionId=chat-789" \
+  -d "phoneNumber=+26771234567" \
+  -d "serviceCode=*384*20251129#" \
+  -d "text=3"
+
+# Select Addition (option 1)
+curl -X POST http://localhost:8000/ussd/callback \
+  -d "sessionId=chat-789" \
+  -d "phoneNumber=+26771234567" \
+  -d "serviceCode=*384*20251129#" \
+  -d "text=3*1"
+
+# Choose Free Chat (option 4)
+curl -X POST http://localhost:8000/ussd/callback \
+  -d "sessionId=chat-789" \
+  -d "phoneNumber=+26771234567" \
+  -d "serviceCode=*384*20251129#" \
+  -d "text=3*1*4"
+
+# Ask a question
+curl -X POST http://localhost:8000/ussd/callback \
+  -d "sessionId=chat-789" \
+  -d "phoneNumber=+26771234567" \
+  -d "serviceCode=*384*20251129#" \
+  -d "text=3*1*4*What+is+5+plus+3"
+
+# Ask another question (option 1)
+curl -X POST http://localhost:8000/ussd/callback \
+  -d "sessionId=chat-789" \
+  -d "phoneNumber=+26771234567" \
+  -d "serviceCode=*384*20251129#" \
+  -d "text=3*1*4*What+is+5+plus+3*1*How+do+I+add+big+numbers"
+
+# Exit chat and receive SMS summary (option 0)
+curl -X POST http://localhost:8000/ussd/callback \
+  -d "sessionId=chat-789" \
+  -d "phoneNumber=+26771234567" \
+  -d "serviceCode=*384*20251129#" \
+  -d "text=3*1*4*What+is+5+plus+3*1*How+do+I+add+big+numbers*0"
+```
+
 ## 📁 Project Structure
 
 ```
@@ -251,11 +314,12 @@ ussd-edu-demo/
 │   ├── services/
 │   │   ├── session.py          # Redis session management
 │   │   ├── sms.py              # Africa's Talking SMS (optimized)
-│   │   ├── llm.py              # Groq LLM integration (quiz gen)
-│   │   └── quiz.py             # Quiz service (LLM + fallback)
+│   │   ├── llm.py              # Groq LLM integration (quiz + chat)
+│   │   ├── quiz.py             # Quiz service (LLM + fallback)
+│   │   └── chat.py             # Chat service (timeout & truncation)
 │   │
 │   └── data/
-│       └── content.py          # Pre-stored lessons & quiz bank
+│       └── content.py          # Pre-stored lessons, quiz bank & chat prompts
 │
 ├── test_llm.py                 # LLM service testing script
 ├── requirements.txt            # Python dependencies
@@ -311,9 +375,10 @@ All settings are managed via `.env` file using Pydantic Settings:
 | `DEBUG` | Enable debug mode | `true` | No |
 | `SESSION_TIMEOUT` | Session timeout (seconds) | `300` | No |
 | `USE_LLM_QUIZ` | Enable LLM quiz generation | `true` | No |
+| `USE_LLM_CHAT` | Enable LLM chat responses | `true` | No |
 | `USSD_SERVICE_CODE` | USSD service code | `*384*123#` | No |
 
-*If `GROQ_API_KEY` is not set, quizzes will use pre-stored questions (static fallback).
+*If `GROQ_API_KEY` is not set, quizzes will use pre-stored questions and chat will use static fallback responses.
 
 ## 🧠 LLM Integration Details
 
@@ -353,6 +418,74 @@ OUTPUT FORMAT:
 - **Total quiz generation**: <5 seconds
 - **USSD timeout budget**: 15 seconds (safe margin)
 - **Fallback activation time**: <100ms
+
+## 💬 Chat Feature Details
+
+### How Chat Works
+
+1. **Topic & Mode Selection** → User selects math topic and conversation type
+2. **Question Input** → User types question via USSD
+3. **LLM Processing** → Groq API generates response with 6-second timeout
+4. **Smart Truncation** → Response trimmed to 90 chars for USSD display
+5. **SMS Fallback** → If truncated or timeout, full answer sent via SMS
+6. **Context Tracking** → Last 3 Q&A turns maintained for continuity
+
+### Conversation Types
+
+| Type | Description | Example Question |
+|------|-------------|------------------|
+| **Explain** | Get concept definitions | "What is addition?" |
+| **Example** | See worked examples | "Show me 5 + 3 step by step" |
+| **Solve** | Solve a specific problem | "What is 12 + 18?" |
+| **Free Chat** | Ask anything about the topic | "How do I add big numbers?" |
+
+### Timeout Strategy
+
+The chat feature uses a dual-timeout approach:
+
+- **USSD Timeout**: 6 seconds (tighter than quiz's 10s)
+- **Background SMS**: Up to 30 seconds for complete answer
+- **Graceful Degradation**:
+  1. ✅ Perfect: Response ≤90 chars, delivered instantly
+  2. ⚠️ Truncated: Response >90 chars, truncated + SMS sent
+  3. ⏰ Deferred: LLM timeout, fallback message + SMS queued
+  4. ❌ Failed: LLM error, friendly error message displayed
+
+### Smart Truncation Algorithm
+
+```python
+# Truncation priority (preserves readability):
+1. Try sentence boundary (. ! ?)
+2. Try clause boundary (, ; :)
+3. Try word boundary (space)
+4. Hard cut with ... (last resort)
+```
+
+### SMS Conversation Summary Format
+
+When user exits chat, they receive an SMS with full history:
+
+```
+EDUBOT SESSION SUMMARY
+
+CHAT - Addition
+
+Q1: What is 2 plus 3
+A: 2 plus 3 is 5.
+
+Q2: How do I add big numbers
+A: Add numbers one by one, like 456 + 278: 456 + 200 = 656,
+then 656 + 70 = 726, then 726 + 8 = 734.
+
+Thanks for learning!
+Dial back anytime.
+```
+
+**Key Features**:
+- No emojis (GSM-7 encoding saves 56% per SMS)
+- Full answers (not truncated versions)
+- Numbered Q&A for easy reference
+- Typically 2-3 SMS per conversation
 
 ## 💰 SMS Cost Optimization Strategy
 
@@ -516,7 +649,7 @@ redis-cli monitor
 
 ## 🛣️ Roadmap
 
-### ✅ Completed
+### ✅ Completed (Phases 1-3)
 - [x] Core USSD menu system
 - [x] Redis session management
 - [x] Africa's Talking SMS integration
@@ -524,14 +657,18 @@ redis-cli monitor
 - [x] LLM quiz generation (Groq integration)
 - [x] SMS cost optimization (60-70% reduction)
 - [x] Graceful LLM fallback
+- [x] Live chat with AI tutor (4 conversation types)
+- [x] Context-aware conversations (3-turn window)
+- [x] Smart response truncation & SMS fallback
+- [x] Full conversation history via SMS
 
-### 🔜 Future Enhancements (Phase 3)
-- [ ] Live chat mode (student asks questions via USSD)
+### 🔜 Future Enhancements (Phase 4+)
 - [ ] Multi-language support (English + Setswana)
 - [ ] Progress tracking (student performance analytics)
 - [ ] Teacher dashboard (monitor student activity)
 - [ ] Advanced topics (fractions, decimals, word problems)
 - [ ] WhatsApp integration (alternative to SMS)
+- [ ] Voice-based learning (IVR integration)
 
 ## 📊 Tech Stack
 
