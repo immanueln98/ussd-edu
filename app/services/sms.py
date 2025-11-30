@@ -25,10 +25,13 @@ class SMSService:
         self.username = settings.at_username
         self.api_key = settings.at_api_key
     
-    def _chunk_message(self, text: str, limit: int = 153) -> List[str]:
+    def _chunk_message(self, text: str, limit: int = 160) -> List[str]:
         """
         Split long messages into SMS-safe chunks.
-        Uses 153 chars (not 160) to leave room for UDH concatenation.
+
+        Note: Using 160 for single SMS (GSM-7 encoding).
+        For multi-part, network handles concatenation.
+        We avoid emojis to stay in GSM-7 (not Unicode).
         """
         chunks = []
         
@@ -111,13 +114,18 @@ class SMSService:
         return await self.send_sms(phone_number, lesson["content"])
     
     async def send_quiz_results(
-        self, 
-        phone_number: str, 
+        self,
+        phone_number: str,
         results: dict
     ) -> dict:
         """
-        Format and send quiz results.
-        
+        Format and send quiz results - OPTIMIZED for cost savings.
+
+        Optimizations:
+        - No emojis (stays in GSM-7 encoding: 160 chars/SMS vs 70 chars/SMS)
+        - Only shows incorrect answers (saves space)
+        - Compact format to minimize SMS count
+
         results: {
             topic: str,
             score: int,
@@ -130,104 +138,116 @@ class SMSService:
         score = results["score"]
         total = results["total"]
         pct = results["percentage"]
-        
-        # Build message
+
+        # Compact header without emojis
         lines = [
-            f"📝 QUIZ RESULTS",
-            f"",
-            f"Topic: {topic}",
-            f"Score: {score}/{total} ({pct}%)",
-            ""
+            f"QUIZ RESULTS - {topic}",
+            f"Score: {score}/{total} ({pct}%)"
         ]
-        
-        # Add emoji based on score
+
+        # Performance message (no emoji)
         if pct >= 80:
-            lines.append("⭐ Excellent work!")
+            lines.append("Excellent work!")
         elif pct >= 60:
-            lines.append("👍 Good job!")
+            lines.append("Good job!")
         else:
-            lines.append("📚 Keep practicing!")
-        
-        lines.append("")
-        
-        # Add each answer
-        for i, ans in enumerate(results["answers"], 1):
-            mark = "✓" if ans["is_correct"] else "✗"
-            lines.append(f"Q{i}: {ans['question']}")
-            lines.append(f"Your answer: {ans['user_answer']} {mark}")
-            if not ans["is_correct"]:
-                lines.append(f"Correct: {ans['correct_answer']}")
+            lines.append("Keep practicing!")
+
+        # Only show WRONG answers to save space
+        wrong_answers = [ans for ans in results["answers"] if not ans["is_correct"]]
+
+        if wrong_answers:
             lines.append("")
-        
-        lines.append("Dial back to learn more!")
-        
+            lines.append("Review these:")
+            for ans in wrong_answers:
+                # Find original question number
+                q_num = results["answers"].index(ans) + 1
+                # Compact format: "Q2: 3x4=? You:10 Ans:12"
+                q_text = ans['question'].replace(" × ", "x").replace(" + ", "+").replace(" - ", "-").replace(" ÷ ", "/")
+                lines.append(f"Q{q_num}: {q_text}")
+                lines.append(f"You:{ans['user_answer']} Ans:{ans['correct_answer']}")
+        else:
+            lines.append("")
+            lines.append("Perfect score! All correct!")
+
+        lines.append("")
+        lines.append("Dial back to practice more!")
+
         message = "\n".join(lines)
         return await self.send_sms(phone_number, message)
     
     async def send_chat_history(
-        self, 
-        phone_number: str, 
+        self,
+        phone_number: str,
         history: List[dict],
         topic: Optional[str] = None
     ) -> dict:
         """
-        Send chat conversation history via SMS.
-        
+        Send chat conversation history via SMS - OPTIMIZED for cost savings.
+
+        Optimizations:
+        - No emojis (stays in GSM-7)
+        - Compact format
+        - Truncated content to fit more in fewer SMS
+
         history: [{question, answer, timestamp}, ...]
         """
         if not history:
             return {"status": "no_history"}
-        
+
         lines = [
-            "📚 CHAT HISTORY",
-            f"Topic: {topic.title() if topic else 'Maths'}",
+            f"CHAT HISTORY - {topic.title() if topic else 'Maths'}",
             ""
         ]
-        
+
         for i, turn in enumerate(history, 1):
-            # Truncate if needed
-            q = turn["question"][:50]
-            a = turn["answer"][:100]
-            
+            # Truncate for compactness
+            q = turn["question"][:45]
+            a = turn["answer"][:80]
+
             lines.append(f"Q{i}: {q}")
             lines.append(f"A{i}: {a}")
-            lines.append("")
-        
+            if i < len(history):  # No blank line after last entry
+                lines.append("")
+
+        lines.append("")
         lines.append("Dial back anytime!")
-        
+
         message = "\n".join(lines)
         return await self.send_sms(phone_number, message)
     
     async def send_session_summary(
-        self, 
+        self,
         phone_number: str,
         lesson_topic: Optional[str] = None,
         quiz_results: Optional[dict] = None,
         chat_history: Optional[List[dict]] = None
     ) -> dict:
         """
-        Send complete session summary when user exits.
+        Send complete session summary when user exits - OPTIMIZED for cost savings.
+
+        Optimizations:
+        - No emojis (stays in GSM-7)
+        - Compact format
+        - Minimal content to reduce SMS count
+
         Combines all activities into one SMS (or multiple if needed).
         """
-        lines = ["📱 EDUBOT SESSION SUMMARY", ""]
-        
+        lines = ["EDUBOT SESSION SUMMARY", ""]
+
         if lesson_topic:
-            lines.append(f"📚 Lesson viewed: {lesson_topic.title()}")
-            lines.append("")
-        
+            lines.append(f"Lesson: {lesson_topic.title()}")
+
         if quiz_results:
-            lines.append(f"📝 Quiz: {quiz_results['score']}/{quiz_results['total']} ({quiz_results['percentage']}%)")
-            lines.append("")
-        
+            lines.append(f"Quiz: {quiz_results['score']}/{quiz_results['total']} ({quiz_results['percentage']}%)")
+
         if chat_history:
-            lines.append(f"💬 Chat questions: {len(chat_history)}")
-            for turn in chat_history[:3]:  # First 3 only in summary
-                lines.append(f"  • {turn['question'][:30]}...")
-            lines.append("")
-        
-        lines.append("Thanks for learning with EduBot!")
-        lines.append("Dial back anytime to continue.")
-        
+            lines.append(f"Chat: {len(chat_history)} questions asked")
+
+        lines.append("")
+        lines.append("Thanks for learning!")
+        lines.append("Dial back anytime.")
+
         message = "\n".join(lines)
         return await self.send_sms(phone_number, message)
 

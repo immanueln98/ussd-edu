@@ -22,10 +22,11 @@ from fastapi import APIRouter, Form, BackgroundTasks
 from fastapi.responses import PlainTextResponse
 from app.services.session import session_manager
 from app.services.sms import sms_service
+from app.services.quiz import quiz_service
 from app.data.content import (
-    TOPICS, 
-    get_lesson, 
-    get_quiz_questions, 
+    TOPICS,
+    get_lesson,
+    get_quiz_questions,
     get_topic_name
 )
 
@@ -64,18 +65,18 @@ async def ussd_callback(
     user_input = text.split('*') if text else []
     
     # Route to appropriate handler based on current menu state
-    response = route_request(
+    response = await route_request(
         session=session,
         session_id=sessionId,
         phone_number=phoneNumber,
         user_input=user_input,
         background_tasks=background_tasks
     )
-    
+
     return response
 
 
-def route_request(
+async def route_request(
     session: dict,
     session_id: str,
     phone_number: str,
@@ -85,24 +86,24 @@ def route_request(
     """
     Route to the appropriate handler based on navigation depth.
     """
-    
+
     # Empty input = main menu
     if not user_input or user_input == ['']:
         return main_menu()
-    
+
     # First level selection
     first_choice = user_input[0]
-    
+
     if first_choice == '1':
         # LEARN PATH
         return handle_learn_path(
-            session, session_id, phone_number, 
+            session, session_id, phone_number,
             user_input[1:], background_tasks
         )
-    
+
     elif first_choice == '2':
         # QUIZ PATH
-        return handle_quiz_path(
+        return await handle_quiz_path(
             session, session_id, phone_number,
             user_input[1:], background_tasks
         )
@@ -208,7 +209,7 @@ def handle_learn_path(
 # QUIZ PATH
 # =============================================================================
 
-def handle_quiz_path(
+async def handle_quiz_path(
     session: dict,
     session_id: str,
     phone_number: str,
@@ -216,40 +217,39 @@ def handle_quiz_path(
     background_tasks: BackgroundTasks
 ) -> str:
     """
-    Handle the Quiz path.
-    
+    Handle the Quiz path with LLM integration.
+
     Flow:
     2 → Show topics
     2*1 → Select topic, ask question count
-    2*1*5 → Start quiz with 5 questions
-    2*1*5*7 → Answer first question with "7"
-    ... continue until complete
+    2*1*5 → Generate questions with LLM, start quiz
+    2*1*5*7 → Answer question
     """
-    
+
     # Check if quiz is already in progress
     if session.get("quiz_state"):
-        return handle_quiz_in_progress(
+        return await handle_quiz_in_progress(
             session, session_id, phone_number,
             sub_input, background_tasks
         )
-    
+
     # Step 1: Show topic selection
     if not sub_input or sub_input == ['']:
         return topic_menu("quiz")
-    
+
     topic_choice = sub_input[0]
-    
+
     # Handle back
     if topic_choice == '0':
         return main_menu()
-    
+
     # Invalid topic
     if topic_choice not in TOPICS:
         return topic_menu("quiz")
-    
+
     topic_key = TOPICS[topic_choice]["key"]
     topic_name = TOPICS[topic_choice]["name"]
-    
+
     # Step 2: Ask for question count
     if len(sub_input) == 1:
         return (
@@ -257,31 +257,45 @@ def handle_quiz_path(
             f"How many questions?\n"
             f"Enter: 3, 5, or 10"
         )
-    
-    # Step 3: Start quiz with specified count
+
+    # Step 3: Generate questions and start quiz
     if len(sub_input) == 2:
         try:
             count = int(sub_input[1])
             if count not in [3, 5, 10]:
-                count = 5  # Default
+                count = 5
         except ValueError:
             count = 5
-        
-        # Get questions and start quiz
-        questions = get_quiz_questions(topic_key, count)
-        session = session_manager.start_quiz(session_id, topic_key, questions)
-        
+
+        # NEW: Use quiz service (LLM with fallback)
+        quiz_data = await quiz_service.get_questions(
+            topic=topic_key,
+            count=count,
+            difficulty="easy"
+        )
+
+        questions = quiz_data["questions"]
+        source = quiz_data["source"]
+
+        # Start quiz with questions
+        session = session_manager.start_quiz_v2(
+            session_id,
+            topic_key,
+            questions,
+            source
+        )
+
         # Show first question
         return show_question(session_id)
-    
+
     # Step 4+: Process answer
-    return process_quiz_answer(
+    return await process_quiz_answer(
         session, session_id, phone_number,
         sub_input[-1], background_tasks
     )
 
 
-def handle_quiz_in_progress(
+async def handle_quiz_in_progress(
     session: dict,
     session_id: str,
     phone_number: str,
@@ -289,14 +303,13 @@ def handle_quiz_in_progress(
     background_tasks: BackgroundTasks
 ) -> str:
     """Handle input when quiz is already active."""
-    
+
     if not sub_input or sub_input == ['']:
         return show_question(session_id)
-    
-    # Latest input is the answer
+
     answer = sub_input[-1]
-    
-    return process_quiz_answer(
+
+    return await process_quiz_answer(
         session, session_id, phone_number,
         answer, background_tasks
     )
@@ -320,7 +333,7 @@ def show_question(session_id: str) -> str:
     )
 
 
-def process_quiz_answer(
+async def process_quiz_answer(
     session: dict,
     session_id: str,
     phone_number: str,

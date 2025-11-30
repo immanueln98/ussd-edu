@@ -14,121 +14,99 @@ Structure:
 LESSONS = {
     "addition": {
         "title": "Addition (Grade 1-3)",
-        "content": """📚 ADDITION LESSON
+        "content": """ADDITION LESSON (Gr 1-3)
 
-Addition means putting numbers together to get a TOTAL.
-
-We use the + sign for addition.
+Addition = putting numbers together for a TOTAL. Use the + sign.
 
 EXAMPLES:
-2 + 3 = 5 (two plus three equals five)
-4 + 1 = 5
-7 + 2 = 9
+2+3=5 (two plus three equals five)
+4+1=5
+7+2=9
 
 TIPS:
-• Count on your fingers
-• Draw dots to help
-• Start with the bigger number
+- Count on fingers
+- Draw dots to help
+- Start with bigger number
 
 PRACTICE:
-1) 3 + 2 = ?
-2) 5 + 4 = ?
-3) 6 + 3 = ?
-
+1) 3+2=?  2) 5+4=?  3) 6+3=?
 Answers: 5, 9, 9
 
-Dial back for a quiz! 🎯"""
+Dial back for a quiz!"""
     },
-    
+
     "subtraction": {
         "title": "Subtraction (Grade 1-3)",
-        "content": """📚 SUBTRACTION LESSON
+        "content": """SUBTRACTION LESSON (Gr 1-3)
 
-Subtraction means taking away to find what's LEFT.
-
-We use the - sign for subtraction.
+Subtraction = taking away to find what's LEFT. Use the - sign.
 
 EXAMPLES:
-5 - 2 = 3 (five minus two equals three)
-8 - 3 = 5
-9 - 4 = 5
+5-2=3 (five minus two equals three)
+8-3=5
+9-4=5
 
 TIPS:
-• Start with the big number
-• Count backwards
-• Think "how many left?"
+- Start with big number
+- Count backwards
+- Think "how many left?"
 
 PRACTICE:
-1) 7 - 3 = ?
-2) 9 - 5 = ?
-3) 6 - 2 = ?
-
+1) 7-3=?  2) 9-5=?  3) 6-2=?
 Answers: 4, 4, 4
 
-Dial back for a quiz! 🎯"""
+Dial back for a quiz!"""
     },
-    
+
     "multiplication": {
         "title": "Multiplication (Grade 2-4)",
-        "content": """📚 MULTIPLICATION LESSON
+        "content": """MULTIPLICATION LESSON (Gr 2-4)
 
-Multiplication is REPEATED ADDITION.
+Multiplication = REPEATED ADDITION. Use the x sign.
 
-We use the × sign.
+EXAMPLE: 3x4 means add 3 four times
+3+3+3+3=12, so 3x4=12
 
-3 × 4 means: 3 + 3 + 3 + 3 = 12
-(add 3 four times)
+MORE EXAMPLES:
+2x5=10 (two groups of five)
+4x3=12 (four groups of three)
+5x2=10
 
-EXAMPLES:
-2 × 5 = 10 (two groups of five)
-4 × 3 = 12 (four groups of three)
-5 × 2 = 10
-
-EASY TRICKS:
-• ×2 = double the number
-• ×5 = count by 5s
-• ×10 = add a zero
+TRICKS:
+- x2 = double the number
+- x5 = count by 5s
+- x10 = add a zero
 
 PRACTICE:
-1) 2 × 4 = ?
-2) 3 × 3 = ?
-3) 5 × 3 = ?
-
+1) 2x4=?  2) 3x3=?  3) 5x3=?
 Answers: 8, 9, 15
 
-Dial back for a quiz! 🎯"""
+Dial back for a quiz!"""
     },
-    
+
     "division": {
         "title": "Division (Grade 3-4)",
-        "content": """📚 DIVISION LESSON
+        "content": """DIVISION LESSON (Gr 3-4)
 
-Division means SHARING EQUALLY.
+Division = SHARING EQUALLY. Use the / sign.
 
-We use the ÷ sign.
+EXAMPLE: 12/3=4 means share 12 into 3 equal groups. Each group gets 4.
 
-12 ÷ 3 = 4 means:
-"Share 12 into 3 equal groups"
-Each group gets 4.
-
-EXAMPLES:
-10 ÷ 2 = 5
-15 ÷ 3 = 5
-20 ÷ 4 = 5
+MORE EXAMPLES:
+10/2=5
+15/3=5
+20/4=5
 
 TIPS:
-• Division is opposite of ×
-• If 3×4=12, then 12÷3=4
-• Share equally!
+- Division is opposite of x
+- If 3x4=12, then 12/3=4
+- Share equally!
 
 PRACTICE:
-1) 8 ÷ 2 = ?
-2) 9 ÷ 3 = ?
-3) 12 ÷ 4 = ?
-
+1) 8/2=?  2) 9/3=?  3) 12/4=?
 Answers: 4, 3, 3
 
-Dial back for a quiz! 🎯"""
+Dial back for a quiz!"""
     }
 }
 

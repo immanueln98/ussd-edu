@@ -91,9 +91,9 @@ class SessionManager:
     # =========================================================================
     
     def start_quiz(
-        self, 
-        session_id: str, 
-        topic: str, 
+        self,
+        session_id: str,
+        topic: str,
         questions: List[dict]
     ) -> Dict[str, Any]:
         """Initialize quiz state."""
@@ -110,7 +110,38 @@ class SessionManager:
             }
             self.save_session(session_id, session)
         return session
-    
+
+    def start_quiz_v2(
+        self,
+        session_id: str,
+        topic: str,
+        questions: List[dict],
+        source: str = "static"
+    ) -> Dict[str, Any]:
+        """
+        Initialize quiz state with questions from any source.
+
+        Args:
+            session_id: USSD session ID
+            topic: Quiz topic
+            questions: List of {"question": "...", "answer": "..."}
+            source: "llm" or "static" (for analytics)
+        """
+        session = self.get_session(session_id)
+        if session:
+            session["current_menu"] = "quiz"
+            session["topic"] = topic
+            session["quiz_state"] = {
+                "questions": questions,
+                "current_index": 0,
+                "answers": [],
+                "score": 0,
+                "total": len(questions),
+                "source": source  # Track if LLM or static
+            }
+            self.save_session(session_id, session)
+        return session
+
     def get_current_question(self, session_id: str) -> Optional[dict]:
         """Get the current quiz question."""
         session = self.get_session(session_id)

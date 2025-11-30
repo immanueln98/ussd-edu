@@ -85,6 +85,13 @@ async def health():
     return {"status": "healthy"}
 
 
+@app.get("/health/llm")
+async def llm_health():
+    """Check LLM service health and response time."""
+    from app.services.llm import llm_service
+    return await llm_service.health_check()
+
+
 @app.get("/test-sms/{phone}")
 async def test_sms(phone: str):
     """

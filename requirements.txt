@@ -21,3 +21,14 @@ groq==0.14.0
 
 # Utilities
 python-dateutil==2.9.0.post0
+
+# LLM Integration (Phase 2)
+langchain==0.3.13
+langchain-community==0.3.13
+langchain-core==0.3.28
+chromadb==0.5.23
+sentence-transformers==3.3.1
+
+# Background tasks
+celery==5.4.0
+

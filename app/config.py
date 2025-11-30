@@ -14,14 +14,20 @@ class Settings(BaseSettings):
     redis_port: int = 6379
     redis_db: int = 0
     
-    # Groq (Phase 2)
+    # Groq LLM (Phase 2)
     groq_api_key: str = ""
-    
+    llm_model: str = "llama-3.1-8b-instant"
+    llm_timeout: int = 10  # seconds
+    llm_max_tokens: int = 500
+
     # App Settings
     debug: bool = True
     session_timeout: int = 300  # 5 minutes
     max_ussd_chars: int = 160
-    
+
+    # Feature Flags
+    use_llm_quiz: bool = True  # Set to False to use pre-stored questions
+
     # SMS Settings
     sms_sender_id: str = "EduBot"
 
